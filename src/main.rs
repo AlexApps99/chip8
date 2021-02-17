@@ -11,8 +11,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ctrlc::set_handler(move || {
         r.store(false, Ordering::SeqCst);
     })?;
+    let argv: Vec<String> = std::env::args().collect();
     let interpreter = std::fs::read("interpreter.bin")?;
-    let game = std::fs::read("test_opcode.ch8")?;
+    let game = std::fs::read::<&str>(if argv.len() == 2 { &argv[1] } else { "ibm.ch8" })?;
     let rng = rand::rngs::StdRng::seed_from_u64(0);
     let mut c8 = emu::Chip8::new(&interpreter, &game, Box::new(rng) as _);
     drop(interpreter);
@@ -22,7 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     while running.load(Ordering::SeqCst) {
         c8.step();
         s.draw(&c8.screen);
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(std::time::Duration::from_millis(50));
     }
     Ok(())
 }

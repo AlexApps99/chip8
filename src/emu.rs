@@ -180,7 +180,11 @@ impl Instruction {
                     c8.sp -= 1;
                 }
             }
-            JP(addr) => c8.pc = addr.0,
+            JP(addr) => {
+                if (addr.0 as usize) < c8.ram.len() {
+                    c8.pc = addr.0
+                }
+            }
             CALL(addr) => {
                 let sp = c8.sp as usize;
                 if sp < c8.stk.len() {
@@ -243,7 +247,11 @@ impl Instruction {
                     c8.pc += 2
                 }
             }
-            LDI(addr) => c8.i = addr.0,
+            LDI(addr) => {
+                if (addr.0 as usize) < c8.ram.len() {
+                    c8.i = addr.0
+                }
+            }
             JPV(addr) => c8.pc = addr.0 + c8.v[0] as u16,
             RND(x, kk) => {
                 let mut val = [0u8; 1];
