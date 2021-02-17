@@ -1,0 +1,4 @@
+# Ideas:
+- JIT
+- Optimizing compiler
+
