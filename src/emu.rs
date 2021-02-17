@@ -1,6 +1,9 @@
 use std::convert::TryInto;
 
 pub struct Chip8 {
+    wrap_tex: bool,
+    hp_shift: bool,
+    mem_inc: bool,
     // Time of last decrement (timers)
     last_dec: std::time::Instant,
     // RNG
@@ -228,9 +231,13 @@ impl Instruction {
                 c8.v[15] = if flag { 0 } else { 1 };
             }
             SHR(x, y) => {
-                let (v, flag) = c8.get_v(y).overflowing_shr(1);
-                *c8.get_v(x) = v;
-                c8.v[15] = if flag { 1 } else { 0 };
+                if c8.hp_shift {
+                    c8.v[15] = *c8.get_v(x) & 1;
+                    *c8.get_v(x) = *c8.get_v(x) >> 1;
+                } else {
+                    c8.v[15] = *c8.get_v(y) & 1;
+                    *c8.get_v(x) = *c8.get_v(y) >> 1;
+                }
             }
             SUBN(x, y) => {
                 let (v, flag) = c8.get_v(y).overflowing_sub(*c8.get_v(x));
@@ -238,9 +245,13 @@ impl Instruction {
                 c8.v[15] = if flag { 0 } else { 1 };
             }
             SHL(x, y) => {
-                let (v, flag) = c8.get_v(y).overflowing_shl(1);
-                *c8.get_v(x) = v;
-                c8.v[15] = if flag { 1 } else { 0 };
+                if c8.hp_shift {
+                    c8.v[15] = *c8.get_v(x) >> 7;
+                    *c8.get_v(x) = *c8.get_v(x) << 1;
+                } else {
+                    c8.v[15] = *c8.get_v(y) >> 7;
+                    *c8.get_v(x) = *c8.get_v(y) << 1;
+                }
             }
             SNEV(x, y) => {
                 if *c8.get_v(x) != *c8.get_v(y) {
@@ -258,14 +269,18 @@ impl Instruction {
                 c8.rng.fill_bytes(&mut val);
                 *c8.get_v(x) = val[0] & kk;
             }
-            // TODO this is a pretty inefficient method
-            // Doing it by row would be better
             DRW(x, y, n) => {
                 let i = c8.i as usize;
                 let sz = *n as usize;
                 if sz > 0 && i + sz <= c8.ram.len() {
-                    let px = ((*c8.get_v(x)) % 64) as usize;
-                    let py = ((*c8.get_v(y)) % 32) as usize;
+                    let (px, py) = if c8.wrap_tex {
+                        (*c8.get_v(x) as usize, *c8.get_v(y) as usize)
+                    } else {
+                        (
+                            ((*c8.get_v(x)) % 64) as usize,
+                            ((*c8.get_v(y)) % 32) as usize,
+                        )
+                    };
                     c8.v[15] = 0;
                     for r in 0..sz {
                         let sprite = c8.ram[i + r];
@@ -302,7 +317,9 @@ impl Instruction {
                 let space = x.0 as usize;
                 if i + space < c8.ram.len() && space < c8.v.len() {
                     c8.ram[i..=i + space].copy_from_slice(&c8.v[0..=space]);
-                    c8.i += x.0 as u16 + 1;
+                    if c8.mem_inc {
+                        c8.i += x.0 as u16 + 1;
+                    }
                 }
             }
             LDVM(x) => {
@@ -310,7 +327,9 @@ impl Instruction {
                 let space = x.0 as usize;
                 if i + space < c8.ram.len() && space < c8.v.len() {
                     c8.v[0..=space].copy_from_slice(&c8.ram[i..=i + space]);
-                    c8.i += x.0 as u16 + 1;
+                    if c8.mem_inc {
+                        c8.i += x.0 as u16 + 1;
+                    }
                 }
             }
         }
@@ -326,6 +345,9 @@ impl Chip8 {
         ram.resize(4096, 0);
 
         Self {
+            wrap_tex: true,
+            hp_shift: true,
+            mem_inc: true,
             last_dec: std::time::Instant::now(),
             rng: Box::new(rng),
             v: [0; 16],
