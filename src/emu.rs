@@ -21,7 +21,7 @@ pub struct Chip8 {
     stk: [u16; 16], // Bigger stack?
     // RAM
     ram: [u8; 4096],
-    pub screen: [[u8; 64]; 32],
+    pub screen: [u64; 32],
 }
 
 // Memory address (12 bits)
@@ -171,7 +171,7 @@ impl Instruction {
     pub fn execute(&self, c8: &mut Chip8) {
         use Instruction::*;
         match self {
-            CLS => c8.screen = [[0; 64]; 32],
+            CLS => c8.screen = [0u64; 32],
             RET => {
                 let sp = c8.sp as usize;
                 if sp > 0 {
@@ -262,22 +262,12 @@ impl Instruction {
                     for r in 0..sz {
                         let sprite = c8.ram[i + r];
                         let cy = py + r;
-                        if cy >= 32 {
-                            continue;
-                        }
-                        for b in 0..8 {
-                            let cx = px + b;
-                            if cx >= 64 {
-                                continue;
-                            }
-                            let sprite_pixel = (sprite >> (7 - b)) & 1;
-                            let screen_pixel = c8.screen[cy][cx];
-                            if sprite_pixel == 1 && screen_pixel != 0 {
-                                c8.v[15] = 1;
-                                c8.screen[cy][cx] = 1;
-                            } else if sprite_pixel == 1 && screen_pixel == 0 {
-                                c8.screen[cy][cx] = 0;
-                            }
+                        if cy < c8.screen.len() {
+                            c8.screen[cy] ^= if px > 56 {
+                                (sprite as u64) >> (px - 56)
+                            } else {
+                                (sprite as u64) << (56 - px)
+                            };
                         }
                     }
                 }
@@ -338,7 +328,7 @@ impl Chip8 {
             sp: 0,
             stk: [0; 16],
             ram: ram.try_into().unwrap(),
-            screen: [[0; 64]; 32],
+            screen: [0u64; 32],
         }
     }
 
@@ -352,7 +342,6 @@ impl Chip8 {
         }]
     }
 
-    // TODO add code to verify the PC value isn't out of bounds
     pub fn step(&mut self) {
         let now = std::time::Instant::now();
         let steps = (now.duration_since(self.last_dec).as_secs_f64() * 60.0).max(255.0) as u8;
@@ -362,12 +351,14 @@ impl Chip8 {
             self.st = if steps > self.st { 0 } else { self.st - steps }
         }
         let idx = self.pc as usize;
-        let val: u16 = ((self.ram[idx] as u16) << 8) | self.ram[idx + 1] as u16;
-        let ins = Instruction::decode(&val);
-        println!("{:?}", ins);
-        if let Some(i) = ins {
-            i.execute(self);
+        if idx + 1 < self.ram.len() {
+            let val: u16 = ((self.ram[idx] as u16) << 8) | self.ram[idx + 1] as u16;
+            let ins = Instruction::decode(&val);
+            println!("{:?}", ins);
+            if let Some(i) = ins {
+                i.execute(self);
+            }
+            self.pc += 2;
         }
-        self.pc += 2;
     }
 }
